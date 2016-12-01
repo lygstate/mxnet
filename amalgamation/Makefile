@@ -1,6 +1,12 @@
 export MXNET_ROOT=`pwd`/..
 # Change this to path of openblas
-export OPENBLAS_ROOT=${MXNET_ROOT}/../OpenBLAS
+ifndef OPENBLAS_ROOT
+	export OPENBLAS_ROOT=${MXNET_ROOT}/../OpenBLAS
+endif
+
+ifndef PREFIX
+	export PREFIX=${MXNET_ROOT}/lib
+endif
 
 # Whether use minimum build without blas and SSE, this will make the library super slow
 ifndef MIN
@@ -22,7 +28,7 @@ ifneq ($(MIN), 1)
 endif
 
 
-all: android libmxnet_predict.a ${MXNET_ROOT}/lib/libmxnet_predict.so
+all: android libmxnet_predict.a ${PREFIX}/libmxnet_predict.so
 
 mxnet_predict0.d: mxnet_predict0.cc
 	${CXX} ${CFLAGS} -MD -MF $@ \
@@ -51,9 +57,14 @@ ifneq ($(ANDROID), 1)
         LDFLAGS+= -lrt
         android:
 else
-        CFLAGS+=  -mhard-float -D_NDK_MATH_NO_SOFTFP=1 -O3
-        LDFLAGS+=  -Wl,--no-warn-mismatch -lm_hard
-        android: jni_libmxnet_predict.so
+  ifneq ($(BINARY), 64)
+    CFLAGS+=  -mhard-float -D_NDK_MATH_NO_SOFTFP=1 -O3
+    LDFLAGS+=  -Wl,--no-warn-mismatch -lm_hard
+  else
+    CFLAGS+=  -D_NDK_MATH_NO_SOFTFP=1 -O3
+    LDFLAGS+=  -Wl,--no-warn-mismatch
+  endif
+  android: jni_libmxnet_predict.so
 endif
 
 libmxnet_predict.js: mxnet_predict-all.cc
@@ -62,8 +73,8 @@ libmxnet_predict.js: mxnet_predict-all.cc
 	-s ALLOW_MEMORY_GROWTH=1
 
 
-${MXNET_ROOT}/lib/libmxnet_predict.so:  mxnet_predict-all.o
-	@mkdir -p ${MXNET_ROOT}/lib
+${PREFIX}/libmxnet_predict.so:  mxnet_predict-all.o
+	@mkdir -p ${PREFIX}
 	${CXX} ${CFLAGS} -shared -o $@ $(filter %.o %.a, $^) $(LDFLAGS)
 	ls -alh $@
 
