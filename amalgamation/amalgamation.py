@@ -1,14 +1,54 @@
 import sys
 import os.path, re, StringIO
 
-blacklist = [
-    'Windows.h', 'cublas_v2.h', 'cuda/tensor_gpu-inl.cuh',
-    'cuda_runtime.h', 'cudnn.h', 'cudnn_lrn-inl.h', 'curand.h',
-    'glog/logging.h', 'io/azure_filesys.h', 'io/hdfs_filesys.h', 'io/s3_filesys.h',
-    'kvstore_dist.h', 'mach/clock.h', 'mach/mach.h',
-    'malloc.h', 'mkl.h', 'mkl_cblas.h', 'mkl_vsl.h', 'mkl_vsl_functions.h',
-    'nvml.h', 'opencv2/opencv.hpp', 'sys/stat.h', 'sys/types.h', 'cuda.h', 'cuda_fp16.h'
-    ]
+whitelist = [
+  'algorithm',
+  'array',
+  'assert.h',
+  'atomic',
+  'cctype',
+  'cfloat',
+  'chrono',
+  'climits',
+  'cmath',
+  'cstddef',
+  'cstdio',
+  'cstdlib',
+  'cstring',
+  'ctime',
+  'deque',
+  'functional',
+  'inttypes.h',
+  'iostream',
+  'istream',
+  'limits',
+  'list',
+  'map',
+  'memory',
+  'mutex',
+  'new',
+  'omp.h',
+  'ostream',
+  'queue',
+  'random',
+  'sched.h',
+  'set',
+  'sstream',
+  'stdexcept',
+  'stdint.h',
+  'stdlib.h',
+  'streambuf',
+  'string',
+  'thread',
+  'time.h',
+  'type_traits',
+  'typeindex',
+  'typeinfo',
+  'unordered_map',
+  'unordered_set',
+  'utility',
+  'vector'
+]
 
 if len(sys.argv) < 4:
     print("Usage: <source.d> <source.cc> <output> [minimum=0] [android=0]\n"
@@ -18,13 +58,11 @@ if len(sys.argv) < 4:
 minimum = int(sys.argv[4]) if len(sys.argv) > 4 else 0
 android = int(sys.argv[5]) if len(sys.argv) > 5 else 0
 
-if minimum:
-    blacklist += ['packet/sse-inl.h', 'emmintrin.h', 'cblas.h']
+if not minimum:
+    whitelist += ['cblas.h']
 
-if android:
-    blacklist += ['config.h']
-    if 'packet/sse-inl.h' not in blacklist:
-        blacklist += ['packet/sse-inl.h']
+if not android:
+    whitelist += ['config.h']
 
 def get_sources(def_file):
     sources = []
@@ -87,7 +125,7 @@ def expand(x, pending):
         h = m.groups()[0].strip('./')
         source = find_source(h, x)
         if not source:
-            if h not in blacklist and h not in sysheaders: sysheaders.append(h)
+            if h in whitelist and h not in sysheaders: sysheaders.append(h)
         else:
             expand(source, pending + [x])
     print >>out, "//===== EXPANDED: %s =====\n" %x
