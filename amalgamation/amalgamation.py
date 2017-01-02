@@ -38,10 +38,13 @@ def get_sources(def_file):
     for f in files:
         f = f.strip()
         if not f or f.endswith('.o:') or f == '\\': continue
-        fn = os.path.relpath(f)
-        if os.path.abspath(f).startswith(mxnet_path) and fn not in visited:
-            sources.append(fn)
-            visited.add(fn)
+        f = os.path.abspath(f)
+        if f.startswith(mxnet_path):
+            fn = os.path.relpath(f)
+            fn = fn.replace('\\', '/')
+            if fn not in visited:
+                sources.append(fn)
+                visited.add(fn)
     return sources
 
 sources = get_sources(sys.argv[1])
