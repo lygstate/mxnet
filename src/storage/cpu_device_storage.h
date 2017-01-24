@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <new>
 #include "mxnet/base.h"
+#include "mshadow/packet-inl.h"
 
 namespace mxnet {
 namespace storage {
