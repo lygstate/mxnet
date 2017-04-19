@@ -44,15 +44,6 @@ MXNET_DLL const char* MXGetLastError();
  * \param param_size The size of parameter ndarray file.
  * \param dev_type The device type, 1: cpu, 2:gpu
  * \param dev_id The device id of the predictor.
- * \param num_input_nodes Number of input nodes to the net,
- *    For feedforward net, this is 1.
- * \param input_keys The name of input argument.
- *    For feedforward net, this is {"data"}
- * \param input_shape_indptr Index pointer of shapes of each input node.
- *    The length of this array = num_input_nodes + 1.
- *    For feedforward net that takes 4 dimensional input, this is {0, 4}.
- * \param input_shape_data A flatted data of shapes of each input node.
- *    For feedforward net that takes 4 dimensional input, this is the shape data.
  * \param out The created predictor handle.
  * \return 0 when success, -1 when failure.
  */
@@ -60,10 +51,6 @@ MXNET_DLL int MXPredCreate(const char* symbol_json_str,
                            const void* param_bytes,
                            int param_size,
                            int dev_type, int dev_id,
-                           mx_uint num_input_nodes,
-                           const char** input_keys,
-                           const mx_uint* input_shape_indptr,
-                           const mx_uint* input_shape_data,
                            PredictorHandle* out);
 
 /*!
@@ -73,15 +60,6 @@ MXNET_DLL int MXPredCreate(const char* symbol_json_str,
  * \param param_size The size of parameter ndarray file.
  * \param dev_type The device type, 1: cpu, 2:gpu
  * \param dev_id The device id of the predictor.
- * \param num_input_nodes Number of input nodes to the net,
- *    For feedforward net, this is 1.
- * \param input_keys The name of input argument.
- *    For feedforward net, this is {"data"}
- * \param input_shape_indptr Index pointer of shapes of each input node.
- *    The length of this array = num_input_nodes + 1.
- *    For feedforward net that takes 4 dimensional input, this is {0, 4}.
- * \param input_shape_data A flatted data of shapes of each input node.
- *    For feedforward net that takes 4 dimensional input, this is the shape data.
  * \param num_output_nodes Number of output nodes to the net,
  * \param output_keys The name of output argument.
  *    For example {"global_pool"}
@@ -93,13 +71,30 @@ MXNET_DLL int MXPredCreatePartialOut(const char* symbol_json_str,
                                      const void* param_bytes,
                                      int param_size,
                                      int dev_type, int dev_id,
-                                     mx_uint num_input_nodes,
-                                     const char** input_keys,
-                                     const mx_uint* input_shape_indptr,
-                                     const mx_uint* input_shape_data,
                                      mx_uint num_output_nodes,
                                      const char** output_keys,
                                      PredictorHandle* out);
+
+/*!
+ * \brief Bind the input nodes layout
+ * \param handle The handle of the predictor.
+ * \param num_input_nodes Number of input nodes to the net,
+ *    For feedforward net, this is 1.
+ * \param input_keys The name of input argument.
+ *    For feedforward net, this is {"data"}
+ * \param input_shape_indptr Index pointer of shapes of each input node.
+ *    The length of this array = num_input_nodes + 1.
+ *    For feedforward net that takes 4 dimensional input, this is {0, 4}.
+ * \param input_shape_data A flatted data of shapes of each input node.
+ *    For feedforward net that takes 4 dimensional input, this is the shape data.
+ * \return 0 when success, -1 when failure.
+ */
+MXNET_DLL int MXPredBindInput(PredictorHandle handle,
+                              mx_uint num_input_nodes,
+                              const char** input_keys,
+                              const mx_uint* input_shape_indptr,
+                              const mx_uint* input_shape_data);
+
 /*!
  * \brief Get the output nodes count.
  * \param handle The handle of the predictor.

@@ -29,6 +29,11 @@ struct MXAPIPredictor {
   std::unordered_map<std::string, size_t> key2arg;
   // executor
   std::unique_ptr<Executor> exec;
+  int dev_type;
+  int dev_id;
+  Symbol sym;
+  std::unordered_map<std::string, NDArray> arg_params;
+  std::unordered_map<std::string, NDArray> aux_params;
 };
 
 struct MXAPINDList {
@@ -42,10 +47,6 @@ int MXPredCreate(const char* symbol_json_str,
                  const void* param_bytes,
                  int param_size,
                  int dev_type, int dev_id,
-                 mx_uint num_input_nodes,
-                 const char** input_keys,
-                 const mx_uint* input_shape_indptr,
-                 const mx_uint* input_shape_data,
                 PredictorHandle* out) {
   return MXPredCreatePartialOut(
       symbol_json_str,
@@ -53,10 +54,6 @@ int MXPredCreate(const char* symbol_json_str,
       param_size,
       dev_type,
       dev_id,
-      num_input_nodes,
-      input_keys,
-      input_shape_indptr,
-      input_shape_data,
       0,
       NULL,
       out);
@@ -69,18 +66,15 @@ int MXPredCreatePartialOut(const char* symbol_json_str,
                            const void* param_bytes,
                            int param_size,
                            int dev_type, int dev_id,
-                           mx_uint num_input_nodes,
-                           const char** input_keys,
-                           const mx_uint* input_shape_indptr,
-                           const mx_uint* input_shape_data,
                            mx_uint num_output_nodes,
                            const char** output_keys,
                            PredictorHandle* out) {
   using nnvm::Symbol;
 
   MXAPIPredictor* ret = new MXAPIPredictor();
+  ret->dev_type = dev_type;
+  ret->dev_id = dev_id;
   API_BEGIN();
-  Symbol sym;
   // make sure symbols are registered
   {
   mx_uint outSize;
@@ -91,11 +85,11 @@ int MXPredCreatePartialOut(const char* symbol_json_str,
   {
     nnvm::Graph g;
     g.attrs["json"] = std::make_shared<nnvm::any>(std::string(symbol_json_str));
-    sym.outputs = nnvm::ApplyPass(g, "LoadLegacyJSON").outputs;
+    ret->sym.outputs = nnvm::ApplyPass(g, "LoadLegacyJSON").outputs;
   }
   // looks likely to output the internal results
   if (num_output_nodes != 0) {
-    Symbol internal = sym.GetInternals();
+    Symbol internal = ret->sym.GetInternals();
     std::vector<std::string> all_out = internal.ListOutputNames();
     std::vector<Symbol> out_syms(num_output_nodes);
     for (mx_uint i = 0; i < num_output_nodes; ++i) {
@@ -109,15 +103,14 @@ int MXPredCreatePartialOut(const char* symbol_json_str,
         CHECK_NE(j, all_out.size() - 1) << "didn't find node name: " << out_key;
       }
     }
-    sym = nnvm::Symbol::CreateGroup(out_syms);
+    ret->sym = nnvm::Symbol::CreateGroup(out_syms);
   }
 
   // load the parameters
-  std::unordered_map<std::string, NDArray> arg_params, aux_params;
   {
     std::unordered_set<std::string> arg_names, aux_names;
-    std::vector<std::string> arg_names_vec = sym.ListInputNames(Symbol::kReadOnlyArgs);
-    std::vector<std::string> aux_names_vec = sym.ListInputNames(Symbol::kAuxiliaryStates);
+    std::vector<std::string> arg_names_vec = ret->sym.ListInputNames(Symbol::kReadOnlyArgs);
+    std::vector<std::string> aux_names_vec = ret->sym.ListInputNames(Symbol::kAuxiliaryStates);
     for (size_t i = 0; i < arg_names_vec.size(); ++i) {
       arg_names.insert(arg_names_vec[i]);
     }
@@ -134,17 +127,29 @@ int MXPredCreatePartialOut(const char* symbol_json_str,
       if (!strncmp(names[i].c_str(), "aux:", 4)) {
         std::string name(names[i].c_str() + 4);
         if (aux_names.count(name) != 0) {
-          aux_params[name] = data[i];
+          ret->aux_params[name] = data[i];
         }
       }
       if (!strncmp(names[i].c_str(), "arg:", 4)) {
         std::string name(names[i].c_str() + 4);
         if (arg_names.count(name) != 0) {
-          arg_params[name] = data[i];
+          ret->arg_params[name] = data[i];
         }
       }
     }
   }
+  *out = ret;
+  API_END_HANDLE_ERROR(delete ret);
+}
+
+int MXPredBindInput(
+    PredictorHandle handle,
+    mx_uint num_input_nodes,
+    const char** input_keys,
+    const mx_uint* input_shape_indptr,
+    const mx_uint* input_shape_data) {
+  MXAPIPredictor* ret = (MXAPIPredictor*)handle;
+  API_BEGIN();
 
   // shape inference and bind
   std::unordered_map<std::string, TShape> known_shape;
@@ -153,9 +158,9 @@ int MXPredCreatePartialOut(const char* symbol_json_str,
         TShape(input_shape_data + input_shape_indptr[i],
                input_shape_data + input_shape_indptr[i + 1]);
   }
-  std::vector<std::string> arg_names = sym.ListInputNames(Symbol::kReadOnlyArgs);
-  std::vector<std::string> aux_names = sym.ListInputNames(Symbol::kAuxiliaryStates);
-  std::vector<TShape> out_shapes(sym.ListOutputNames().size());
+  std::vector<std::string> arg_names = ret->sym.ListInputNames(Symbol::kReadOnlyArgs);
+  std::vector<std::string> aux_names = ret->sym.ListInputNames(Symbol::kAuxiliaryStates);
+  std::vector<TShape> out_shapes(ret->sym.ListOutputNames().size());
   std::vector<TShape> aux_shapes(aux_names.size());
   std::vector<TShape> arg_shapes;
   for (size_t i = 0; i < arg_names.size(); ++i) {
@@ -165,14 +170,14 @@ int MXPredCreatePartialOut(const char* symbol_json_str,
 
   try {
     std::vector<TShape> in_shapes;
-    for (std::string key : sym.ListInputNames(Symbol::kAll)) {
+    for (std::string key : ret->sym.ListInputNames(Symbol::kAll)) {
       if (known_shape.count(key) != 0) {
         in_shapes.push_back(known_shape[key]);
       } else {
         in_shapes.push_back(TShape());
       }
     }
-    nnvm::Graph g; g.outputs = sym.outputs;
+    nnvm::Graph g; g.outputs = ret->sym.outputs;
     g = nnvm::pass::InferShape(std::move(g), in_shapes, "__shape__");
     bool infer_complete = (g.GetAttr<size_t>("shape_num_unknown_nodes") == 0);
     CHECK(infer_complete)
@@ -184,20 +189,20 @@ int MXPredCreatePartialOut(const char* symbol_json_str,
     throw dmlc::Error(err.msg);
   }
 
-  Context ctx = Context::Create(static_cast<Context::DeviceType>(dev_type), dev_id);
+  Context ctx = Context::Create(static_cast<Context::DeviceType>(ret->dev_type), ret->dev_id);
 
   std::vector<NDArray> arg_arrays, aux_arrays;
   for (size_t i = 0; i < arg_shapes.size(); ++i) {
     NDArray nd = NDArray(arg_shapes[i], ctx);
-    if (arg_params.count(arg_names[i]) != 0) {
-      CopyFromTo(arg_params[arg_names[i]], &nd);
+    if (ret->arg_params.count(arg_names[i]) != 0) {
+      CopyFromTo(ret->arg_params[arg_names[i]], &nd);
     }
     arg_arrays.push_back(nd);
   }
   for (size_t i = 0; i < aux_shapes.size(); ++i) {
     NDArray nd = NDArray(aux_shapes[i], ctx);
-    if (aux_params.count(aux_names[i]) != 0) {
-      CopyFromTo(aux_params[aux_names[i]], &nd);
+    if (ret->aux_params.count(aux_names[i]) != 0) {
+      CopyFromTo(ret->aux_params[aux_names[i]], &nd);
     }
     aux_arrays.push_back(nd);
   }
@@ -209,15 +214,14 @@ int MXPredCreatePartialOut(const char* symbol_json_str,
     std::vector<OpReqType> grad_req(arg_arrays.size(), kNullOp);
 
 
-    ret->exec.reset(Executor::Bind(sym, ctx, ctx_map,
+    ret->exec.reset(Executor::Bind(ret->sym, ctx, ctx_map,
                                    arg_arrays,
                                    grad_store, grad_req,
                                    aux_arrays));
     ret->out_shapes = out_shapes;
     ret->out_arrays = ret->exec->outputs();
   }
-  *out = ret;
-  API_END_HANDLE_ERROR(delete ret);
+  API_END();
 }
 
 int MXPredGetOutputCount(PredictorHandle handle) {
