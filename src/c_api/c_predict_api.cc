@@ -134,7 +134,7 @@ int MXPredBindInput(
     const char** input_keys,
     const mx_uint* input_shape_indptr,
     const mx_uint* input_shape_data) {
-  MXAPIPredictor* ret = (MXAPIPredictor*)handle;
+  MXAPIPredictor* ret = static_cast<MXAPIPredictor*>(handle);
   API_BEGIN();
 
   Context ctx = ret->context;
@@ -191,6 +191,13 @@ int MXPredBindInput(
     ret->out_arrays = ret->exec->outputs();
   }
   API_END();
+}
+
+int MXPredGetOutputCount(PredictorHandle handle) {
+  MXAPIPredictor* p = static_cast<MXAPIPredictor*>(handle);
+  int result = 0;
+  result = (int)p->out_arrays.size();
+  return result;
 }
 
 int MXPredGetOutputShape(PredictorHandle handle,
