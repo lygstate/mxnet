@@ -101,6 +101,13 @@ MXNET_DLL int MXPredCreatePartialOut(const char* symbol_json_str,
                                      const char** output_keys,
                                      PredictorHandle* out);
 /*!
+ * \brief Get the output nodes count.
+ * \param handle The handle of the predictor.
+ * \return -1 when failure. otherwise the number of output nodes.
+ */
+MXNET_DLL int MXPredGetOutputCount(PredictorHandle handle);
+
+/*!
  * \brief Get the shape of output node.
  *  The returned shape_data and shape_ndim is only valid before next call to MXPred function.
  * \param handle The handle of the predictor.

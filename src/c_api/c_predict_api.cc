@@ -220,6 +220,13 @@ int MXPredCreatePartialOut(const char* symbol_json_str,
   API_END_HANDLE_ERROR(delete ret);
 }
 
+int MXPredGetOutputCount(PredictorHandle handle) {
+  MXAPIPredictor* p = static_cast<MXAPIPredictor*>(handle);
+  int result = 0;
+  result = (int)p->out_arrays.size();
+  return result;
+}
+
 int MXPredGetOutputShape(PredictorHandle handle,
                          mx_uint out_index,
                          mx_uint** shape_data,
