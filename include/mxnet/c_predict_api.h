@@ -15,11 +15,14 @@
 
 #ifdef _WIN32
 #ifdef MXNET_EXPORTS
+#define MXNET_DLL_CPP __declspec(dllexport)
 #define MXNET_DLL MXNET_EXTERN_C __declspec(dllexport)
 #else
+#define MXNET_DLL_CPP __declspec(dllimport)
 #define MXNET_DLL MXNET_EXTERN_C __declspec(dllimport)
 #endif
 #else
+#define MXNET_DLL_CPP
 #define MXNET_DLL MXNET_EXTERN_C
 #endif
 
