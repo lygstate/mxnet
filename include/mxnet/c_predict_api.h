@@ -7,20 +7,12 @@
 #ifndef MXNET_C_PREDICT_API_H_
 #define MXNET_C_PREDICT_API_H_
 
+#include "c_api.h"
+
 /*! \brief Inhibit C++ name-mangling for MXNet functions. */
 #ifdef __cplusplus
 extern "C" {
 #endif  // __cplusplus
-
-#ifdef _WIN32
-#ifdef MXNET_EXPORTS
-#define MXNET_DLL __declspec(dllexport)
-#else
-#define MXNET_DLL __declspec(dllimport)
-#endif
-#else
-#define MXNET_DLL
-#endif
 
 /*! \brief manually define unsigned int */
 typedef unsigned int mx_uint;
