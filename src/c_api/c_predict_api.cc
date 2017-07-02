@@ -34,6 +34,7 @@ struct MXAPIPredictor {
   Symbol sym;
   std::unordered_map<std::string, NDArray> arg_params;
   std::unordered_map<std::string, NDArray> aux_params;
+  std::unique_ptr<Executor> exec_shared;
 };
 
 struct MXAPINDList {
@@ -213,11 +214,17 @@ int MXPredBindInput(
     std::vector<NDArray> grad_store(arg_arrays.size());
     std::vector<OpReqType> grad_req(arg_arrays.size(), kNullOp);
 
-
+    if (!ret->exec_shared) {
+        ret->exec_shared.reset(Executor::Bind(ret->sym, ctx, ctx_map,
+                                    arg_arrays,
+                                    grad_store, grad_req,
+                                    aux_arrays));
+    }
     ret->exec.reset(Executor::Bind(ret->sym, ctx, ctx_map,
                                    arg_arrays,
                                    grad_store, grad_req,
-                                   aux_arrays));
+                                   aux_arrays,
+                                   ret->exec_shared.get()));
     ret->out_shapes = out_shapes;
     ret->out_arrays = ret->exec->outputs();
   }
