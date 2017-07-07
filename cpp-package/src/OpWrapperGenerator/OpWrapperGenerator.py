@@ -352,9 +352,10 @@ if __name__ == "__main__":
     #if arg.hasDefault:
     #    decl = decl + "=" + arg.defaultString
     #print(decl)
-
-    temp_file_name = ""
-    output_file = '../../include/mxnet-cpp/op.h'
+    cpp_package_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    output_file = os.path.join(cpp_package_dir, 'include/mxnet-cpp/op.h')
+    if os.path.exists(output_file):
+      os.remove(output_file)
     try:
         # generate file header
         patternStr = ("/*!\n"
@@ -382,20 +383,10 @@ if __name__ == "__main__":
                       "} //namespace cpp\n"
                       "} //namespace mxnet\n"
                       "#endif  // CPP_PACKAGE_INCLUDE_MXNET_CPP_OP_H_\n")
-
-        # Generate a temporary file name
-        tf = tempfile.NamedTemporaryFile()
-        temp_file_name = tf.name
-        tf.close()
-        with open(temp_file_name, 'w') as f:
+        with open(output_file, 'w') as f:
             f.write(patternStr % ParseAllOps())
 
     except Exception, e:
-      os.remove(output_file)
-      if len(temp_file_name) > 0:
-        os.remove(temp_file_name)
       raise(e)
-
-    os.system('./move-if-change.sh ' + temp_file_name + ' ' + output_file)
     pass
 
