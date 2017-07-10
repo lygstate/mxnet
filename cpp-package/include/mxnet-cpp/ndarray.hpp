@@ -26,51 +26,48 @@ inline NDArray::NDArray(const NDArrayHandle &handle) {
   blob_ptr_ = std::make_shared<NDBlob>(handle);
 }
 inline NDArray::NDArray(const std::vector<mx_uint> &shape, const Context &context,
-                        bool delay_alloc) {
+                        bool delay_alloc, int dtype) {
   NDArrayHandle handle;
-  CHECK_EQ(MXNDArrayCreate(shape.data(), shape.size(), context.GetDeviceType(),
-                           context.GetDeviceId(), delay_alloc, &handle),
+  CHECK_EQ(MXNDArrayCreateEx(shape.data(), (int)shape.size(), context.GetDeviceType(),
+                           context.GetDeviceId(), delay_alloc, dtype, &handle),
            0);
   blob_ptr_ = std::make_shared<NDBlob>(handle);
 }
-inline NDArray::NDArray(const Shape &shape, const Context &context, bool delay_alloc) {
+inline NDArray::NDArray(const Shape &shape, const Context &context, bool delay_alloc, int dtype) {
   NDArrayHandle handle;
-  CHECK_EQ(MXNDArrayCreate(shape.data(), shape.ndim(), context.GetDeviceType(),
-                           context.GetDeviceId(), delay_alloc, &handle),
+  CHECK_EQ(MXNDArrayCreateEx(shape.data(), shape.ndim(), context.GetDeviceType(),
+                           context.GetDeviceId(), delay_alloc, dtype, &handle),
            0);
   blob_ptr_ = std::make_shared<NDBlob>(handle);
 }
-inline NDArray::NDArray(const mx_float *data, size_t size) {
-  NDArrayHandle handle;
-  CHECK_EQ(MXNDArrayCreateNone(&handle), 0);
-  MXNDArraySyncCopyFromCPU(handle, data, size);
-  blob_ptr_ = std::make_shared<NDBlob>(handle);
-}
-inline NDArray::NDArray(const mx_float *data, const Shape &shape,
+template<typename T>
+inline NDArray::NDArray(const T *data, const Shape &shape,
                         const Context &context) {
   NDArrayHandle handle;
-  CHECK_EQ(MXNDArrayCreate(shape.data(), shape.ndim(), context.GetDeviceType(),
-                           context.GetDeviceId(), false, &handle),
+  CHECK_EQ(MXNDArrayCreateEx(shape.data(), shape.ndim(), context.GetDeviceType(),
+                           context.GetDeviceId(), false, getType<T>(), &handle),
            0);
   MXNDArraySyncCopyFromCPU(handle, data, shape.Size());
   blob_ptr_ = std::make_shared<NDBlob>(handle);
 }
-inline NDArray::NDArray(const std::vector<mx_float> &data, const Shape &shape,
+inline NDArray::NDArray(const void *data, const Shape &shape, const Context &context, int dtype) {
+  NDArrayHandle handle;
+  CHECK_EQ(MXNDArrayCreateEx(shape.data(), shape.ndim(), context.GetDeviceType(),
+                           context.GetDeviceId(), false, dtype, &handle),
+           0);
+  MXNDArraySyncCopyFromCPU(handle, data, shape.Size());
+  blob_ptr_ = std::make_shared<NDBlob>(handle);
+}
+template<typename T>
+inline NDArray::NDArray(const std::vector<T> &data, const Shape &shape,
                         const Context &context) {
   NDArrayHandle handle;
-  CHECK_EQ(MXNDArrayCreate(shape.data(), shape.ndim(), context.GetDeviceType(),
-                           context.GetDeviceId(), false, &handle),
+  CHECK_EQ(MXNDArrayCreateEx(shape.data(), shape.ndim(), context.GetDeviceType(),
+                           context.GetDeviceId(), false, getType<T>(), &handle),
            0);
   MXNDArraySyncCopyFromCPU(handle, data.data(), shape.Size());
   blob_ptr_ = std::make_shared<NDBlob>(handle);
 }
-inline NDArray::NDArray(const std::vector<mx_float> &data) {
-  NDArrayHandle handle;
-  CHECK_EQ(MXNDArrayCreateNone(&handle), 0);
-  MXNDArraySyncCopyFromCPU(handle, data.data(), data.size());
-  blob_ptr_ = std::make_shared<NDBlob>(handle);
-}
-
 inline NDArray NDArray::operator+(mx_float scalar) {
   NDArray ret;
   Operator("_plus_scalar")(*this, scalar).Invoke(ret);
@@ -154,19 +151,22 @@ inline NDArray NDArray::ArgmaxChannel() {
   return ret;
 }
 
-inline void NDArray::SyncCopyFromCPU(const mx_float *data, size_t size) {
-  MXNDArraySyncCopyFromCPU(blob_ptr_->handle_, data, size);
+inline void NDArray::SyncCopyFromCPU(const void *data, size_t size) {
+  MXNDArraySyncCopyFromCPU(blob_ptr_->handle_, data, size > 0 ? size : Size());
 }
-inline void NDArray::SyncCopyFromCPU(const std::vector<mx_float> &data) {
-  MXNDArraySyncCopyFromCPU(blob_ptr_->handle_, data.data(), data.size());
+template <typename T>
+inline void NDArray::SyncCopyFromCPU(const std::vector<T> &data) {
+  MXNDArraySyncCopyFromCPU(blob_ptr_->handle_, (const void*)data.data(), data.size());
 }
-inline void NDArray::SyncCopyToCPU(mx_float *data, size_t size) {
-  MXNDArraySyncCopyToCPU(blob_ptr_->handle_, data, size > 0 ? size : Size());
+template <typename T>
+inline void NDArray::SyncCopyToCPU(T *data, size_t size) {
+  MXNDArraySyncCopyToCPU(blob_ptr_->handle_, (void*)data, size > 0 ? size : Size());
 }
-inline void NDArray::SyncCopyToCPU(std::vector<mx_float> *data, size_t size) {
-  size = size > 0 ? size : Size();
-  data->resize(size);
-  MXNDArraySyncCopyToCPU(blob_ptr_->handle_, data->data(), size);
+template <typename T>
+inline void NDArray::SyncCopyToCPU(std::vector<T> &data) {
+  size_t size = Size();
+  data.resize(size);
+  MXNDArraySyncCopyToCPU(blob_ptr_->handle_, (void*)data.data(), size);
 }
 inline NDArray NDArray::Copy(const Context &ctx) const {
   NDArray ret(GetShape(), ctx);
@@ -206,13 +206,13 @@ inline void NDArray::SampleGaussian(mx_float mu, mx_float sigma, NDArray *out) {
 inline void NDArray::SampleUniform(mx_float begin, mx_float end, NDArray *out) {
   Operator("_sample_uniform")(begin, end).Invoke(*out);
 }
-inline void NDArray::Load(const std::string &file_name,
+inline void NDArray::Load(const void* param_data, size_t param_size,
                           std::vector<NDArray> *array_list,
                           std::map<std::string, NDArray> *array_map) {
   mx_uint out_size, out_name_size;
   NDArrayHandle *out_arr;
   const char **out_names;
-  CHECK_EQ(MXNDArrayLoad(file_name.c_str(), &out_size, &out_arr, &out_name_size,
+  CHECK_EQ(MXNDArrayLoad(param_data, param_size, &out_size, &out_arr, &out_name_size,
                          &out_names),
            0);
   if (array_list != nullptr) {
@@ -227,13 +227,12 @@ inline void NDArray::Load(const std::string &file_name,
     }
   }
 }
-inline std::map<std::string, NDArray> NDArray::LoadToMap(
-    const std::string &file_name) {
+inline std::map<std::string, NDArray> NDArray::LoadToMap(const void* param_data, size_t param_size) {
   std::map<std::string, NDArray> array_map;
   mx_uint out_size, out_name_size;
   NDArrayHandle *out_arr;
   const char **out_names;
-  CHECK_EQ(MXNDArrayLoad(file_name.c_str(), &out_size, &out_arr, &out_name_size,
+  CHECK_EQ(MXNDArrayLoad(param_data, param_size, &out_size, &out_arr, &out_name_size,
                          &out_names),
            0);
   if (out_name_size > 0) {
@@ -244,12 +243,12 @@ inline std::map<std::string, NDArray> NDArray::LoadToMap(
   }
   return array_map;
 }
-inline std::vector<NDArray> NDArray::LoadToList(const std::string &file_name) {
+inline std::vector<NDArray> NDArray::LoadToList(const void* param_data, size_t param_size) {
   std::vector<NDArray> array_list;
   mx_uint out_size, out_name_size;
   NDArrayHandle *out_arr;
   const char **out_names;
-  CHECK_EQ(MXNDArrayLoad(file_name.c_str(), &out_size, &out_arr, &out_name_size,
+  CHECK_EQ(MXNDArrayLoad(param_data, param_size, &out_size, &out_arr, &out_name_size,
                          &out_names),
            0);
   for (mx_uint i = 0; i < out_size; ++i) {
@@ -288,14 +287,6 @@ inline size_t NDArray::Offset(size_t c, size_t h, size_t w) const {
   return h * shape[0] * shape[2] + w * shape[0] + c;
 }
 
-inline mx_float NDArray::At(size_t h, size_t w) const {
-  return GetData()[Offset(h, w)];
-}
-
-inline mx_float NDArray::At(size_t c, size_t h, size_t w) const {
-  return GetData()[Offset(c, h, w)];
-}
-
 inline size_t NDArray::Size() const {
   size_t ret = 1;
   for (auto &i : GetShape()) ret *= i;
@@ -319,14 +310,14 @@ inline int NDArray::GetDType() const {
   return ret;
 }
 
-inline const mx_float *NDArray::GetData() const {
+inline const void *NDArray::GetData() const {
   void *ret;
   CHECK_NE(GetContext().GetDeviceType(), DeviceType::kGPU);
   MXNDArrayGetData(blob_ptr_->handle_, &ret);
   if (GetDType() != 0) {
     return NULL;
   }
-  return static_cast<mx_float*>(ret);
+  return ret;
 }
 
 inline Context NDArray::GetContext() const {

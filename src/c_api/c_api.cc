@@ -231,19 +231,20 @@ int MXNDArraySave(const char* fname,
   API_END();
 }
 
-int MXNDArrayLoad(const char* fname,
-                  mx_uint *out_size,
-                  NDArrayHandle** out_arr,
-                  mx_uint *out_name_size,
-                  const char*** out_names) {
+MXNET_DLL int MXNDArrayLoad(const void* param_data,
+                            size_t param_size,
+                            mx_uint *out_size,
+                            NDArrayHandle** out_arr,
+                            mx_uint *out_name_size,
+                            const char*** out_names) {
   MXAPIThreadLocalEntry *ret = MXAPIThreadLocalStore::Get();
   ret->ret_vec_str.clear();
   API_BEGIN();
   std::vector<NDArray> data;
   std::vector<std::string> &names = ret->ret_vec_str;
   {
-    std::unique_ptr<dmlc::Stream> fi(dmlc::Stream::Create(fname, "r"));
-    mxnet::NDArray::Load(fi.get(), &data, &names);
+    dmlc::MemoryFixedSizeStream fi((void*)param_data, param_size);  // NOLINT(*)
+    NDArray::Load(&fi, &data, &names);
   }
   ret->ret_handles.resize(data.size());
   for (size_t i = 0; i < data.size(); ++i) {

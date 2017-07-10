@@ -33,7 +33,7 @@ struct Shape {
   * \param v the vector
   */
   explicit Shape(const std::vector<index_t> &v)
-    : ndim_(v.size()) {
+    : ndim_((index_t)v.size()) {
     if (ndim_ <= kStackCache) {
       data_heap_ = NULL;
       num_heap_allocated_ = 0;

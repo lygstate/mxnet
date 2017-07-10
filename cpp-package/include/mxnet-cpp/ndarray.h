@@ -12,6 +12,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <stdint.h>
 #include "mxnet-cpp/base.h"
 #include "mxnet-cpp/shape.h"
 
@@ -24,11 +25,25 @@ enum DeviceType {
   kCPUPinned = 3
 };
 
+enum DataTypeFlag {
+  kFloat32,
+  kFloat64,
+  kFloat16,
+  kUint8,
+  kInt32
+};
+
 /*!
 * \brief Context interface
 */
 class Context {
  public:
+  /*!
+  * \brief Context constructor
+  * \param type type of the device
+  * \param id id of the device
+  */
+  Context(const Context& _context) : type_(_context.type_), id_(_context.id_) {}
   /*!
   * \brief Context constructor
   * \param type type of the device
@@ -100,6 +115,29 @@ struct NDBlob {
 */
 class NDArray {
  public:
+  template <typename T>
+  static DataTypeFlag getType();
+
+  template <>
+  static DataTypeFlag getType<float>() {
+    return kFloat32;
+  }
+
+  template <>
+  static DataTypeFlag getType<double>() {
+    return kFloat64;
+  }
+
+  template <>
+  static DataTypeFlag getType<uint8_t>() {
+    return kUint8;
+  }
+
+  template <>
+  static DataTypeFlag getType<int32_t>() {
+    return kInt32;
+  }
+
   /*!
   * \brief construct with a none handle
   */
@@ -113,33 +151,44 @@ class NDArray {
   * \param shape the shape of array
   * \param constext context of NDArray
   * \param delay_alloc whether delay the allocation
+  * \param dtype data type of NDArray
   */
   NDArray(const std::vector<mx_uint> &shape, const Context &context,
-          bool delay_alloc = true);
+          bool delay_alloc = true, int dtype = kFloat32);
   /*!
   * \brief construct a new dynamic NDArray
   * \param shape the shape of array
   * \param constext context of NDArray
   * \param delay_alloc whether delay the allocation
+  * \param dtype data type of NDArray
   */
-  NDArray(const Shape &shape, const Context &context, bool delay_alloc = true);
-  NDArray(const mx_float *data, size_t size);
+  NDArray(const Shape &shape, const Context &context,
+          bool delay_alloc = true, int dtype = kFloat32);
   /*!
   * \brief construct a new dynamic NDArray
   * \param data the data to create NDArray from
   * \param shape the shape of array
   * \param constext context of NDArray
   */
-  NDArray(const mx_float *data, const Shape &shape, const Context &context);
+  template<typename T>
+  NDArray(const T *data, const Shape &shape, const Context &context);
+  /*!
+  * \brief construct a new dynamic NDArray
+  * \param data the data to create NDArray from
+  * \param shape the shape of array
+  * \param constext context of NDArray
+  * \param dtype data type of NDArray
+  */
+  NDArray(const void *data, const Shape &shape, const Context &context, int dtype = kFloat32);
   /*!
   * \brief construct a new dynamic NDArray
   * \param data the data to create NDArray from
   * \param shape the shape of array
   * \param constext context of NDArray
   */
-  NDArray(const std::vector<mx_float> &data, const Shape &shape,
+  template<typename T>
+  NDArray(const std::vector<T> &data, const Shape &shape,
           const Context &context);
-  explicit NDArray(const std::vector<mx_float> &data);
   NDArray operator+(mx_float scalar);
   NDArray operator-(mx_float scalar);
   NDArray operator*(mx_float scalar);
@@ -221,7 +270,7 @@ class NDArray {
   * \param data the data source to copy from.
   * \param size the memory size we want to copy from.
   */
-  void SyncCopyFromCPU(const mx_float *data, size_t size);
+  void SyncCopyFromCPU(const void *data, size_t size = 0);
   /*!
   * \brief Do a synchronize copy from a continugous CPU memory region.
   *
@@ -229,9 +278,10 @@ class NDArray {
   *  This is useful to copy data from existing memory region that are
   *  not wrapped by NDArray(thus dependency not being tracked).
   *
-  * \param data the data source to copy from, int the form of mx_float vector
+  * \param data the data source to copy from, int the form of T vector
   */
-  void SyncCopyFromCPU(const std::vector<mx_float> &data);
+  template <typename T>
+  void SyncCopyFromCPU(const std::vector<T> &data);
   /*!
   * \brief Do a synchronize copy to a continugous CPU memory region.
   *
@@ -242,7 +292,8 @@ class NDArray {
   * \param data the data source to copyinto.
   * \param size the memory size we want to copy into. Defualt value is Size()
   */
-  void SyncCopyToCPU(mx_float *data, size_t size = 0);
+  template <typename T>
+  void SyncCopyToCPU(T *data, size_t size = 0);
   /*!
   * \brief Do a synchronize copy to a continugous CPU memory region.
   *
@@ -253,7 +304,8 @@ class NDArray {
   * \param data the data source to copyinto.
   * \param size the memory size we want to copy into. Defualt value is Size()
   */
-  void SyncCopyToCPU(std::vector<mx_float> *data, size_t size = 0);
+  template <typename T>
+  void SyncCopyToCPU(std::vector<T> &data);
   /*!
   * \brief Copy the content of current array to other.
   * \param other the new context of this NDArray
@@ -287,7 +339,10 @@ class NDArray {
   * \param w width position
   * \return value of two dimensions array
   */
-  mx_float At(size_t h, size_t w) const;
+  template <typename T>
+  inline T At(size_t h, size_t w) const {
+    return ((T*)GetData())[Offset(h, w)];
+  }
   /*!
    * \brief return value of three dimensions array
    * \param c channel position
@@ -295,7 +350,10 @@ class NDArray {
    * \param w width position
    * \return value of three dimensions array
    */
-  mx_float At(size_t c, size_t h, size_t w) const;
+  template <typename T>
+  T At(size_t c, size_t h, size_t w) const {
+    return ((T*)GetData())[Offset(c, h, w)];
+  }
   /*!
   * \brief Slice a NDArray
   * \param begin begin index in first dim
@@ -346,7 +404,7 @@ class NDArray {
   * \param array_map a map from names to NDArrays returned, do not fill the map
   * if nullptr is given or no names is stored in binary file.
   */
-  static void Load(const std::string &file_name,
+  static void Load(const void* param_data, size_t param_size,
                    std::vector<NDArray> *array_list = nullptr,
                    std::map<std::string, NDArray> *array_map = nullptr);
   /*!
@@ -354,13 +412,13 @@ class NDArray {
   * \param file_name name of the binary file.
   * \return a list of NDArrays.
   */
-  static std::map<std::string, NDArray> LoadToMap(const std::string &file_name);
+  static std::map<std::string, NDArray> LoadToMap(const void* param_data, size_t param_size);
   /*!
   * \brief Load list of NDArrays from binary file.
   * \param file_name name of the binary file.
   * \return a map from names to NDArrays.
   */
-  static std::vector<NDArray> LoadToList(const std::string &file_name);
+  static std::vector<NDArray> LoadToList(const void* param_data, size_t param_size);
   /*!
   * \brief save a map of string->NDArray to binary file.
   * \param file_name name of the binary file.
@@ -390,7 +448,7 @@ class NDArray {
   /*!
   * \return the data pointer to the current NDArray
   */
-  const mx_float *GetData() const;
+  const void *GetData() const;
 
   /*!
   * \return the context of NDArray

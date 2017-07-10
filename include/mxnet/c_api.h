@@ -272,15 +272,17 @@ MXNET_DLL int MXNDArraySave(const char* fname,
                             NDArrayHandle* args,
                             const char** keys);
 /*!
- * \brief Load list of narray from the file.
- * \param fname name of the file.
+ * \brief Load list of narray from the memory.
+ * \param param_data parameter data in memory to be loaded.
+ * \param param_size parameter data size in memory to be loaded.
  * \param out_size number of narray loaded.
  * \param out_arr head of the returning narray handles.
  * \param out_name_size size of output name arrray.
  * \param out_names the names of returning NDArrays, can be NULL
  * \return 0 when success, -1 when failure happens
  */
-MXNET_DLL int MXNDArrayLoad(const char* fname,
+MXNET_DLL int MXNDArrayLoad(const void* param_data,
+                            size_t param_size,
                             mx_uint *out_size,
                             NDArrayHandle** out_arr,
                             mx_uint *out_name_size,
